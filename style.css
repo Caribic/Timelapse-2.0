@@ -1,0 +1,308 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+@font-face {
+  /* systémové monospace pro číselné readouty - vypadá jako digitální displej intervalometru */
+}
+
+:root {
+  --amber: #f5a623;
+  --amber-dim: #a06a1a;
+  --bg: #0b0d10;
+  --panel: #14171b;
+  --panel2: #1b1f24;
+  --text: #f2f0ea;
+  --text-dim: #8b8f96;
+  --danger: #e5484d;
+  --mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ---------- Kamera + HUD ---------- */
+
+#camWrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#cam {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.96);
+}
+
+#vignette {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+}
+
+#flash {
+  position: absolute; inset: 0;
+  background: var(--amber);
+  opacity: 0;
+  pointer-events: none;
+}
+#flash.active { opacity: 0.55; transition: opacity 200ms ease-out; }
+
+#topBar {
+  position: absolute;
+  top: env(safe-area-inset-top, 10px);
+  left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+#eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--amber);
+  background: rgba(0,0,0,0.4);
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(245,166,35,0.35);
+}
+
+.iconBtn {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(245,166,35,0.3);
+  color: var(--amber);
+  font-size: 18px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+}
+
+/* ---------- Signature: clonový ciferník ---------- */
+
+#dialWrap {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 132px; height: 132px;
+}
+
+#dial {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+
+#dialTrack {
+  fill: rgba(20,23,27,0.75);
+  stroke: rgba(245,166,35,0.18);
+  stroke-width: 6;
+}
+
+#dialProgress {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 553;
+  stroke-dashoffset: 553;
+  transition: stroke-dashoffset 0.2s linear;
+}
+
+#dialCenter {
+  position: absolute; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#frameCount {
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+
+#frameLabel {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+/* ---------- Readouty (uplynulo / zbývá / výstup) ---------- */
+
+#readouts {
+  position: absolute;
+  top: 56px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.readout {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(245,166,35,0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-width: 92px;
+}
+
+.rLabel {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.rValue {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+/* ---------- Ovládací panel ---------- */
+
+#controls {
+  flex: 0 0 auto;
+  background: var(--panel);
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #23262b;
+  overflow-y: auto;
+  max-height: 52vh;
+}
+
+.modeSwitch {
+  display: flex;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 12px;
+  border: 1px solid #23262b;
+}
+
+.modeBtn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 9px 4px;
+  font-size: 12.5px;
+  border-radius: 8px;
+  font-family: var(--sans);
+}
+
+.modeBtn.active {
+  background: var(--amber);
+  color: #1a1204;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.row label {
+  font-size: 13px;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+.row input[type="number"] {
+  width: 78px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a2e34;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  text-align: right;
+}
+
+.row select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a2e34;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  max-width: 58%;
+}
+
+.toggleRow input[type="checkbox"] {
+  width: 20px; height: 20px;
+  accent-color: var(--amber);
+}
+
+.primaryBtn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--amber);
+  color: #1a1204;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 6px 0 12px;
+  letter-spacing: 0.01em;
+}
+
+.primaryBtn.running {
+  background: var(--danger);
+  color: white;
+}
+
+.buttonsRow {
+  gap: 8px;
+}
+
+.smallBtn {
+  flex: 1;
+  padding: 11px 6px;
+  border-radius: 10px;
+  border: 1px solid #2a2e34;
+  background: var(--panel2);
+  color: #ddd;
+  font-size: 13px;
+}
+
+.smallBtn.danger {
+  color: #ff8a8d;
+  border-color: #3a2323;
+}
+
+#hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 10px 2px 0;
+}
