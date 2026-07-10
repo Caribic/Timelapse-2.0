@@ -1,5 +1,5 @@
 // ============================================================
-// Intervalometer - Time-lapse PWA (Inovovaná Verze s AE/AF Lock)
+// Intervalometer - Time-lapse PWA (S integrovanou kalkulačkou)
 // ============================================================
 
 const cam = document.getElementById('cam');
@@ -40,7 +40,7 @@ let timerHandle = null;
 let startedAt = 0;
 let wakeLock = null;
 
-// ---------- Kamera & Zámky Expozice/Ostření ----------
+// ---------- Kamera & Hardwarové Zámky ----------
 async function startCamera() {
   if (stream) stream.getTracks().forEach(t => t.stop());
   try {
@@ -51,12 +51,8 @@ async function startCamera() {
     cam.srcObject = stream;
     await cam.play();
     
-    // Po nastartování kamery zkusíme obnovit stav zámku, pokud byl zamčený
-    if (isLocked) {
-      applyHardwareLocks(true);
-    } else {
-      lockBtn.textContent = '🔓';
-    }
+    if (isLocked) { await applyHardwareLocks(true); } 
+    else { lockBtn.textContent = '🔓'; }
     
     updateStorageStatus();
   } catch (err) {
@@ -68,47 +64,24 @@ async function applyHardwareLocks(shouldLock) {
   if (!stream) return;
   const track = stream.getVideoTracks()[0];
   if (!track) return;
-
   try {
     const capabilities = track.getCapabilities ? track.getCapabilities() : {};
     const constraints = {};
-
-    // Kontrola a aplikace zámku expozice
-    if (capabilities.exposureMode) {
-      if (shouldLock && capabilities.exposureMode.includes('manual')) {
-        constraints.exposureMode = 'manual';
-      } else if (!shouldLock && capabilities.exposureMode.includes('continuous')) {
-        constraints.exposureMode = 'continuous';
-      }
+    if (capabilities.exposureMode && capabilities.exposureMode.includes('manual')) {
+      constraints.exposureMode = shouldLock ? 'manual' : 'continuous';
     }
-
-    // Kontrola a aplikace zámku ostření
-    if (capabilities.focusMode) {
-      if (shouldLock && capabilities.focusMode.includes('manual')) {
-        constraints.focusMode = 'manual';
-      } else if (!shouldLock && capabilities.focusMode.includes('continuous')) {
-        constraints.focusMode = 'continuous';
-      }
+    if (capabilities.focusMode && capabilities.focusMode.includes('manual')) {
+      constraints.focusMode = shouldLock ? 'manual' : 'continuous';
     }
-
-    // Kontrola a aplikace zámku vyvážení bílé
-    if (capabilities.whiteBalanceMode) {
-      if (shouldLock && capabilities.whiteBalanceMode.includes('manual')) {
-        constraints.whiteBalanceMode = 'manual';
-      } else if (!shouldLock && capabilities.whiteBalanceMode.includes('continuous')) {
-        constraints.whiteBalanceMode = 'continuous';
-      }
+    if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('manual')) {
+      constraints.whiteBalanceMode = shouldLock ? 'manual' : 'continuous';
     }
-
     if (Object.keys(constraints).length > 0) {
       await track.applyConstraints({ advanced: [constraints] });
     }
-  } catch (e) {
-    console.warn("Hardwarový zámek expozice/ostření není plně podporován tímto prohlížečem/zařízením.", e);
-  }
+  } catch (e) { console.warn("Hardwarové uzamčení senzoru není zařízením podporováno.", e); }
 }
 
-// Manuální kliknutí na zámek
 lockBtn.addEventListener('click', () => {
   isLocked = !isLocked;
   lockBtn.textContent = isLocked ? '🔒' : '🔓';
@@ -121,7 +94,7 @@ switchCamBtn.addEventListener('click', () => {
   startCamera();
 });
 
-// ---------- Režimy & Kalkulačka ----------
+// ---------- Živá Time-lapse Kalkulačka ----------
 document.querySelectorAll('.modeBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.modeBtn').forEach(b => b.classList.remove('active'));
@@ -137,14 +110,17 @@ document.querySelectorAll('.modeBtn').forEach(btn => {
   el.addEventListener('input', updateEstimate)
 );
 
+// Matematické jádro kalkulačky: Spočítá cílové snímky na základě zvoleného režimu
 function targetFrameCount() {
   const interval = parseFloat(intervalInput.value) || 1;
-  if (mode === 'count') return parseInt(countInput.value) || 0;
+  if (mode === 'count') {
+    return parseInt(countInput.value) || 0;
+  }
   if (mode === 'duration') {
     const totalSec = (parseFloat(durationInput.value) || 0) * 60;
     return Math.floor(totalSec / interval);
   }
-  return 0;
+  return 0; // Pro bez limitu
 }
 
 function updateEstimate() {
@@ -152,13 +128,27 @@ function updateEstimate() {
   const fps = parseInt(fpsInput.value) || 24;
   const target = targetFrameCount();
 
-  if (mode !== 'infinite' && target > 0) {
-    const totalSeconds = target * interval;
-    remainingVal.textContent = formatDuration(totalSeconds);
-    outputVal.textContent = (target / fps).toFixed(1) + ' s @ ' + fps + ' fps';
-  } else {
-    remainingVal.textContent = '—';
-    outputVal.textContent = (frames.length / fps).toFixed(1) + ' s @ ' + fps + ' fps';
+  if (running) return; // Během nahrávání se řídíme reálným stavem, ne kalkulačkou
+
+  if (mode === 'count') {
+    // Uživatel zadal počet snímků -> Spočítáme celkový čas focení a délku videa
+    const totalSecondsFoceni = target * interval;
+    remainingVal.textContent = formatDuration(totalSecondsFoceni);
+    outputVal.textContent = (target / fps).toFixed(1) + ' s';
+    frameCountEl.textContent = target; 
+  } 
+  else if (mode === 'duration') {
+    // Uživatel zadal čas focení -> Spočítáme nutný počet snímků a délku videa
+    const totalSecondsFoceni = (parseFloat(durationInput.value) || 0) * 60;
+    remainingVal.textContent = formatDuration(totalSecondsFoceni);
+    outputVal.textContent = (target / fps).toFixed(1) + ' s';
+    frameCountEl.textContent = target; // Ukážeme uživateli, kolik snímků intervalometr udělá
+  } 
+  else if (mode === 'infinite') {
+    // Bez limitu -> Hodnoty se odvíjí od aktuálně vyfocených snímků
+    remainingVal.textContent = 'Nekonečno';
+    outputVal.textContent = (frames.length / fps).toFixed(1) + ' s';
+    frameCountEl.textContent = frames.length;
   }
 
   updateStorageStatus();
@@ -172,44 +162,37 @@ function formatDuration(sec) {
   return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
 }
 
-// ---------- Smart Správa Úložiště ----------
+// ---------- Odhad Úložiště ----------
 async function updateStorageStatus() {
   let availableGB = "—";
   if (navigator.storage && navigator.storage.estimate) {
     try {
       const estimate = await navigator.storage.estimate();
-      const remainingBytes = estimate.quota - estimate.usage;
-      availableGB = (remainingBytes / (1024 * 1024 * 1024)).toFixed(1);
-    } catch (e) { console.error(e); }
+      availableGB = ((estimate.quota - estimate.usage) / (1024 * 1024 * 1024)).toFixed(1);
+    } catch (e) {}
   }
 
-  // Empirický odhad velikosti jednoho JPEG snímku podle rozlišení
-  let estimatedFrameSizeKB = 350; // full res default odhad
+  let estimatedFrameSizeKB = 350; 
   if (resSelect.value === 'hd') estimatedFrameSizeKB = 120;
   if (resSelect.value === 'sd') estimatedFrameSizeKB = 60;
 
   const target = targetFrameCount();
-  const currentCount = frames.length;
-  const countToCalculate = (mode === 'infinite' || target === 0) ? currentCount : target;
-  
+  const countToCalculate = (mode === 'infinite' || running) ? frames.length : target;
   const totalEstimatedMB = ((countToCalculate * estimatedFrameSizeKB) / 1024).toFixed(1);
 
-  storageInfo.textContent = `Volno: ${availableGB} GB | Odhad: ${totalEstimatedMB} MB`;
+  storageInfo.textContent = `Volno v tel: ${availableGB} GB | Velikost lapsu: ${totalEstimatedMB} MB`;
 }
 
 // ---------- Wake Lock ----------
 async function acquireWakeLock() {
   if (!wakeToggle.checked) return;
-  try {
-    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-  } catch (e) { console.warn('Wake Lock nedostupný'); }
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
 }
-
 function releaseWakeLock() {
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 
-// ---------- Zachycení snímku ----------
+// ---------- Snímání a Ořez ----------
 function targetWidth() {
   const v = resSelect.value;
   if (v === 'hd') return 1280;
@@ -221,7 +204,6 @@ function captureFrame() {
   const vw = cam.videoWidth;
   const vh = cam.videoHeight;
   const aspectMode = aspectSelect.value;
-
   let srcX = 0, srcY = 0, srcW = vw, srcH = vh;
 
   if (aspectMode === '3:2') {
@@ -232,13 +214,9 @@ function captureFrame() {
     else { srcH = vw / (16 / 9); srcY = (vh - srcH) / 2; }
   }
 
-  let destW = srcW;
-  let destH = srcH;
+  let destW = srcW, destH = srcH;
   const tw = targetWidth();
-  if (tw && srcW > tw) {
-    destW = tw;
-    destH = Math.round(srcH * (tw / srcW));
-  }
+  if (tw && srcW > tw) { destW = tw; destH = Math.round(srcH * (tw / srcW)); }
 
   const canvas = document.createElement('canvas');
   canvas.width = destW; canvas.height = destH;
@@ -259,14 +237,14 @@ function flashEffect() {
   setTimeout(() => flashEl.classList.remove('active'), 120);
 }
 
-// ---------- Řízení snímání ----------
+// ---------- Řízení Běhu ----------
 startBtn.addEventListener('click', () => { running ? stopCapture() : startCapture(); });
 
 async function startCapture() {
   const interval = parseFloat(intervalInput.value) || 1;
   const target = targetFrameCount();
 
-  if (mode === 'count' && target <= 0) return alert('Zadejte cílový počet snímků.');
+  if (mode !== 'infinite' && target <= 0) return alert('Zadejte platné parametry pro time-lapse.');
   
   running = true;
   startedAt = Date.now();
@@ -274,12 +252,11 @@ async function startCapture() {
   startBtn.classList.add('running');
   aspectSelect.disabled = true;
   resSelect.disabled = true;
+  fpsInput.disabled = true;
   [intervalInput, countInput, durationInput].forEach(el => el.disabled = true);
   
-  // Při startu automaticky uzamkneme expozici hardwarově
   await applyHardwareLocks(true);
   await acquireWakeLock();
-
   runElapsedClock();
 
   const tick = async () => {
@@ -291,22 +268,26 @@ async function startCapture() {
       finishCapture();
       return;
     }
-    updateDialAndRemaining(interval, target);
+    updateLiveReadouts(interval, target);
     timerHandle = setTimeout(tick, interval * 1000);
   };
-  updateDialAndRemaining(interval, target);
+  updateLiveReadouts(interval, target);
   tick();
 }
 
-function updateDialAndRemaining(interval, target) {
+function updateLiveReadouts(interval, target) {
+  const fps = parseInt(fpsInput.value) || 24;
   if (mode !== 'infinite' && target > 0) {
     const frac = Math.min(1, frames.length / target);
     dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE * (1 - frac);
+    // Živý odpočet: Kolik času focení ještě zbývá na stativu
     remainingVal.textContent = formatDuration((target - frames.length) * interval);
   } else {
     dialProgress.style.strokeDashoffset = 0;
+    remainingVal.textContent = 'Bez limitu';
   }
-  outputVal.textContent = (frames.length / (parseInt(fpsInput.value) || 24)).toFixed(1) + ' s';
+  // Živé info: Kolik sekund videa už máme fyzicky vyfoceno
+  outputVal.textContent = (frames.length / fps).toFixed(1) + ' s';
   updateStorageStatus();
 }
 
@@ -326,22 +307,22 @@ function stopCapture() {
   startBtn.classList.remove('running');
   aspectSelect.disabled = false;
   resSelect.disabled = false;
+  fpsInput.disabled = false;
   [intervalInput, countInput, durationInput].forEach(el => el.disabled = false);
   
-  // Pokud nebylo kliknuto ručně na zámek, po skončení uvolníme hardwarovou expozici
   if (!isLocked) applyHardwareLocks(false);
   releaseWakeLock();
+  updateEstimate();
 }
 
 function finishCapture() {
   stopCapture();
-  hint.textContent = `Hotovo! Zachyceno ${frames.length} snímků. Nyní stáhněte ZIP nebo video.`;
+  hint.textContent = `Hotovo! Zachyceno ${frames.length} snímků. Nyní sestavte video nebo stáhněte ZIP.`;
 }
 
 clearBtn.addEventListener('click', () => {
   if (frames.length === 0 || !confirm('Smazat všechny snímky?')) return;
   frames = [];
-  frameCountEl.textContent = '0';
   dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE;
   updateEstimate();
   hint.textContent = '';
@@ -366,9 +347,7 @@ videoBtn.addEventListener('click', async () => {
   try {
     const blob = await renderVideo();
     downloadOrShare(blob, 'timelapse_video.mp4', blob.type);
-  } catch (e) {
-    alert('Sestavení videa selhalo: ' + e.message);
-  }
+  } catch (e) { alert('Sestavení videa selhalo: ' + e.message); }
   videoBtn.textContent = 'Sestavit video';
 });
 
@@ -379,16 +358,11 @@ function renderVideo() {
     const canvas = document.createElement('canvas');
     canvas.width = first.width; canvas.height = first.height;
     const ctx = canvas.getContext('2d');
-
     const canvasStream = canvas.captureStream(fps);
     
     let options = { mimeType: 'video/mp4;codecs=avc1' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm;codecs=vp9' };
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm' };
-    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/webm;codecs=vp9' }; }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/webm' }; }
 
     try {
       const recorder = new MediaRecorder(canvasStream, options);
@@ -406,11 +380,8 @@ function renderVideo() {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         await new Promise(r => setTimeout(r, frameDuration));
       }
-      
       setTimeout(() => recorder.stop(), frameDuration * 2);
-    } catch (err) {
-      reject(new Error("Chyba inicializace: " + err.message));
-    }
+    } catch (err) { reject(new Error("Chyba inicializace: " + err.message)); }
   });
 }
 
@@ -426,10 +397,7 @@ function loadImage(blob) {
 async function downloadOrShare(blob, filename, mime) {
   const file = new File([blob], filename, { type: mime });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { 
-      await navigator.share({ files: [file], title: filename }); 
-      return; 
-    } catch (e) {}
+    try { await navigator.share({ files: [file], title: filename }); return; } catch (e) {}
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
