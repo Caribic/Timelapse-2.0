@@ -1,5 +1,5 @@
 // ============================================================
-// Intervalometer - Time-lapse PWA
+// Intervalometer - Time-lapse PWA (Opravená verze)
 // ============================================================
 
 const cam = document.getElementById('cam');
@@ -14,6 +14,7 @@ const switchCamBtn = document.getElementById('switchCamBtn');
 const intervalInput = document.getElementById('intervalInput');
 const countInput = document.getElementById('countInput');
 const durationInput = document.getElementById('durationInput');
+const aspectSelect = document.getElementById('aspectSelect');
 const countRow = document.getElementById('countRow');
 const durationRow = document.getElementById('durationRow');
 const resSelect = document.getElementById('resSelect');
@@ -25,31 +26,29 @@ const videoBtn = document.getElementById('videoBtn');
 const clearBtn = document.getElementById('clearBtn');
 const hint = document.getElementById('hint');
 
-const DIAL_CIRCUMFERENCE = 2 * Math.PI * 88; // musí odpovídat r=88 v SVG a stroke-dasharray v CSS
+const DIAL_CIRCUMFERENCE = 2 * Math.PI * 88;
 
 let frames = [];
 let stream = null;
 let facingMode = 'environment';
-let mode = 'count'; // 'count' | 'duration' | 'infinite'
+let mode = 'count'; 
 let running = false;
 let timerHandle = null;
 let startedAt = 0;
 let wakeLock = null;
 
 // ---------- Kamera ----------
-
 async function startCamera() {
   if (stream) stream.getTracks().forEach(t => t.stop());
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode } },
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 3840 }, height: { ideal: 2160 } },
       audio: false
     });
     cam.srcObject = stream;
     await cam.play();
   } catch (err) {
-    alert('Nepodařilo se spustit kameru: ' + err.message +
-      '\n\nZkontroluj přístup ke kameře v Nastavení a že stránka běží na HTTPS.');
+    alert('Nepodařilo se spustit kameru: ' + err.message + '\n\nZkontrolujte oprávnění.');
   }
 }
 
@@ -59,7 +58,6 @@ switchCamBtn.addEventListener('click', () => {
 });
 
 // ---------- Přepínač režimů ----------
-
 document.querySelectorAll('.modeBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.modeBtn').forEach(b => b.classList.remove('active'));
@@ -71,7 +69,7 @@ document.querySelectorAll('.modeBtn').forEach(btn => {
   });
 });
 
-[intervalInput, countInput, durationInput, fpsInput].forEach(el =>
+[intervalInput, countInput, durationInput, fpsInput, aspectSelect].forEach(el =>
   el.addEventListener('input', updateEstimate)
 );
 
@@ -82,7 +80,7 @@ function targetFrameCount() {
     const totalSec = (parseFloat(durationInput.value) || 0) * 60;
     return Math.floor(totalSec / interval);
   }
-  return 0; // infinite
+  return 0;
 }
 
 function updateEstimate() {
@@ -93,10 +91,10 @@ function updateEstimate() {
   if (mode !== 'infinite' && target > 0) {
     const totalSeconds = target * interval;
     remainingVal.textContent = formatDuration(totalSeconds);
-    outputVal.textContent = (target / fps).toFixed(1) + ' s @ ' + fps + 'fps';
+    outputVal.textContent = (target / fps).toFixed(1) + ' s @ ' + fps + ' fps';
   } else {
     remainingVal.textContent = '—';
-    outputVal.textContent = (frames.length / fps).toFixed(1) + ' s @ ' + fps + 'fps';
+    outputVal.textContent = (frames.length / fps).toFixed(1) + ' s @ ' + fps + ' fps';
   }
 }
 
@@ -108,103 +106,94 @@ function formatDuration(sec) {
   return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
 }
 
-// ---------- Wake Lock (obrazovka nezhasne během běhu) ----------
-
+// ---------- Wake Lock ----------
 async function acquireWakeLock() {
   if (!wakeToggle.checked) return;
   try {
-    if ('wakeLock' in navigator) {
-      wakeLock = await navigator.wakeLock.request('screen');
-    }
-  } catch (e) {
-    console.warn('Wake Lock se nepodařilo získat:', e);
-  }
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { console.warn('Wake Lock nedostupný'); }
 }
 
 function releaseWakeLock() {
-  if (wakeLock) {
-    wakeLock.release().catch(() => {});
-    wakeLock = null;
-  }
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 
-document.addEventListener('visibilitychange', async () => {
-  if (running && document.visibilityState === 'visible' && wakeToggle.checked) {
-    await acquireWakeLock();
-  }
-});
-
-// ---------- Zvuk závěrky ----------
-
-function playShutterSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 660;
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
-  } catch (e) { /* ignore */ }
-}
-
-// ---------- Rozlišení snímků ----------
-
+// ---------- Snímání a Ořez Poměru Stran ----------
 function targetWidth() {
   const v = resSelect.value;
   if (v === 'hd') return 1280;
   if (v === 'sd') return 854;
-  return null; // full
+  return null; 
 }
 
 function captureFrame() {
-  const vw = cam.videoWidth, vh = cam.videoHeight;
-  let w = vw, h = vh;
-  const tw = targetWidth();
-  if (tw && vw > tw) {
-    w = tw;
-    h = Math.round(vh * (tw / vw));
+  const vw = cam.videoWidth;
+  const vh = cam.videoHeight;
+  const aspectMode = aspectSelect.value;
+
+  let srcX = 0, srcY = 0, srcW = vw, srcH = vh;
+
+  // Výpočet ořezu podle zvoleného poměru stran
+  if (aspectMode === '3:2') {
+    if (vw / vh > 3 / 2) {
+      srcW = vh * (3 / 2); srcX = (vw - srcW) / 2;
+    } else {
+      srcH = vw / (3 / 2); srcY = (vh - srcH) / 2;
+    }
+  } else if (aspectMode === '16:9') {
+    if (vw / vh > 16 / 9) {
+      srcW = vh * (16 / 9); srcX = (vw - srcW) / 2;
+    } else {
+      srcH = vw / (16 / 9); srcY = (vh - srcH) / 2;
+    }
   }
+
+  // Škálování rozlišení výstupu
+  let destW = srcW;
+  let destH = srcH;
+  const tw = targetWidth();
+  if (tw && srcW > tw) {
+    destW = tw;
+    destH = Math.round(srcH * (tw / srcW));
+  }
+
   const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(cam, 0, 0, w, h);
+  canvas.width = destW; canvas.height = destH;
+  const ctx = canvas.getContext('2d');
+  
+  // Vykreslení vyříznutého středu obrazu
+  ctx.drawImage(cam, srcX, srcY, srcW, srcH, 0, 0, destW, destH);
 
   return new Promise(resolve => {
     canvas.toBlob(blob => {
       frames.push(blob);
       frameCountEl.textContent = frames.length;
       resolve(blob);
-    }, 'image/jpeg', 0.88);
+    }, 'image/jpeg', 0.90);
   });
 }
 
 function flashEffect() {
   flashEl.classList.add('active');
-  setTimeout(() => flashEl.classList.remove('active'), 160);
-  playShutterSound();
+  setTimeout(() => flashEl.classList.remove('active'), 120);
 }
 
-// ---------- Hlavní smyčka ----------
-
-startBtn.addEventListener('click', () => {
-  running ? stopCapture() : startCapture();
-});
+// ---------- Ovládání běhu ----------
+startBtn.addEventListener('click', () => { running ? stopCapture() : startCapture(); });
 
 async function startCapture() {
   const interval = parseFloat(intervalInput.value) || 1;
   const target = targetFrameCount();
 
-  if (mode === 'count' && target <= 0) { alert('Zadej platný cílový počet snímků.'); return; }
-  if (mode === 'duration' && target <= 0) { alert('Zadaná doba trvání je s tímto intervalem příliš krátká na alespoň 1 snímek.'); return; }
-
+  if (mode === 'count' && target <= 0) return alert('Zadejte cílový počet snímků.');
+  
   running = true;
   startedAt = Date.now();
-  startBtn.textContent = 'Zastavit time-lapse';
+  startBtn.textContent = 'Zastavit';
   startBtn.classList.add('running');
-  lockSettingInputs(true);
+  aspectSelect.disabled = true;
+  resSelect.disabled = true;
+  [intervalInput, countInput, durationInput].forEach(el => el.disabled = true);
   await acquireWakeLock();
 
   runElapsedClock();
@@ -229,26 +218,20 @@ function updateDialAndRemaining(interval, target) {
   if (mode !== 'infinite' && target > 0) {
     const frac = Math.min(1, frames.length / target);
     dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE * (1 - frac);
-    const remainingShots = target - frames.length;
-    remainingVal.textContent = formatDuration(remainingShots * interval);
+    remainingVal.textContent = formatDuration((target - frames.length) * interval);
   } else {
     dialProgress.style.strokeDashoffset = 0;
   }
-  outputVal.textContent = (frames.length / (parseInt(fpsInput.value) || 24)).toFixed(1) + ' s @ ' + fpsInput.value + 'fps';
+  outputVal.textContent = (frames.length / (parseInt(fpsInput.value) || 24)).toFixed(1) + ' s';
 }
 
 function runElapsedClock() {
   const tick = () => {
     if (!running) return;
     elapsedVal.textContent = formatDuration((Date.now() - startedAt) / 1000);
-    requestAnimationFrame(() => setTimeout(tick, 250));
+    setTimeout(tick, 250);
   };
   tick();
-}
-
-function finishCapture() {
-  stopCapture();
-  hint.textContent = 'Time-lapse dokončen — ' + frames.length + ' snímků. Teď je můžeš stáhnout jako ZIP nebo sestavit video.';
 }
 
 function stopCapture() {
@@ -256,33 +239,30 @@ function stopCapture() {
   clearTimeout(timerHandle);
   startBtn.textContent = 'Spustit time-lapse';
   startBtn.classList.remove('running');
-  lockSettingInputs(false);
+  aspectSelect.disabled = false;
+  resSelect.disabled = false;
+  [intervalInput, countInput, durationInput].forEach(el => el.disabled = false);
   releaseWakeLock();
 }
 
-function lockSettingInputs(disabled) {
-  [intervalInput, countInput, durationInput, resSelect].forEach(el => el.disabled = disabled);
-  document.querySelectorAll('.modeBtn').forEach(b => b.disabled = disabled);
+function finishCapture() {
+  stopCapture();
+  hint.textContent = `Hotovo! Zachyceno ${frames.length} snímků. Nyní stáhněte ZIP nebo video.`;
 }
 
-// ---------- Smazat vše ----------
-
 clearBtn.addEventListener('click', () => {
-  if (frames.length === 0) return;
-  if (confirm('Opravdu smazat všech ' + frames.length + ' snímků?')) {
-    frames = [];
-    frameCountEl.textContent = '0';
-    dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE;
-    updateEstimate();
-    hint.textContent = '';
-  }
+  if (frames.length === 0 || !confirm('Smazat všechny snímky?')) return;
+  frames = [];
+  frameCountEl.textContent = '0';
+  dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE;
+  updateEstimate();
+  hint.textContent = '';
 });
 
 // ---------- Export: ZIP ----------
-
 zipBtn.addEventListener('click', async () => {
-  if (frames.length === 0) { alert('Nejsou žádné snímky ke stažení.'); return; }
-  zipBtn.textContent = 'Balím…';
+  if (frames.length === 0) return alert('Žádné snímky ke stažení.');
+  zipBtn.textContent = 'Balím ZIP…';
   const zip = new JSZip();
   frames.forEach((blob, i) => {
     zip.file('frame_' + String(i + 1).padStart(5, '0') + '.jpg', blob);
@@ -292,14 +272,13 @@ zipBtn.addEventListener('click', async () => {
   downloadOrShare(content, 'timelapse_snimky.zip', 'application/zip');
 });
 
-// ---------- Export: video ----------
-
+// ---------- Export: Video s podporou iOS (Safari) ----------
 videoBtn.addEventListener('click', async () => {
-  if (frames.length < 2) { alert('Potřebuješ alespoň 2 snímky pro sestavení videa.'); return; }
+  if (frames.length < 2) return alert('Pro video potřebujete alespoň 2 snímky.');
   videoBtn.textContent = 'Renderuji…';
   try {
     const blob = await renderVideo();
-    downloadOrShare(blob, 'timelapse_video.webm', 'video/webm');
+    downloadOrShare(blob, 'timelapse_video.mp4', blob.type);
   } catch (e) {
     alert('Sestavení videa selhalo: ' + e.message);
   }
@@ -315,21 +294,37 @@ function renderVideo() {
     const ctx = canvas.getContext('2d');
 
     const canvasStream = canvas.captureStream(fps);
-    const recorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' });
-    const chunks = [];
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
-    recorder.onerror = e => reject(e.error || new Error('MediaRecorder error'));
-
-    recorder.start();
-    const frameDuration = 1000 / fps;
-    for (let i = 0; i < frames.length; i++) {
-      const img = await loadImage(frames[i]);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      await sleep(frameDuration);
+    
+    // DETEKCE PODPOROVANÉHO FORMÁTU (Zásadní pro iOS / Android multiplatformitu)
+    let options = { mimeType: 'video/mp4;codecs=avc1' }; // Priorita pro iOS Safari
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: 'video/webm;codecs=vp9' }; // Android / Chrome fallback
     }
-    await sleep(frameDuration * 2);
-    recorder.stop();
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: 'video/webm' };
+    }
+
+    try {
+      const recorder = new MediaRecorder(canvasStream, options);
+      const chunks = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => resolve(new Blob(chunks, { type: options.mimeType }));
+      recorder.onerror = e => reject(e.error || new Error('Chyba rekordéru'));
+
+      recorder.start();
+      const frameDuration = 1000 / fps;
+
+      for (let i = 0; i < frames.length; i++) {
+        const img = await loadImage(frames[i]);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        await new Promise(r => setTimeout(r, frameDuration));
+      }
+      
+      setTimeout(() => recorder.stop(), frameDuration * 2);
+    } catch (err) {
+      reject(new Error("Váš prohlížeč nepodporuje vytváření videa z plátna: " + err.message));
+    }
   });
 }
 
@@ -342,31 +337,30 @@ function loadImage(blob) {
   });
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
+// Spolehlivá stahovací funkce
 async function downloadOrShare(blob, filename, mime) {
   const file = new File([blob], filename, { type: mime });
+  
+  // Pokus o sdílení (iOS AirDrop / Uložit do souborů)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: filename }); return; }
-    catch (e) { /* uživatel zrušil - zkusíme klasické stažení */ }
+    try { 
+      await navigator.share({ files: [file], title: filename }); 
+      return; 
+    } catch (e) { /* uživatel zavřel ShareSheet - pokračuje download */ }
   }
+  
+  // Klasické stažení přes skrytý odkaz
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
+  document.body.appendChild(a); 
+  a.click(); 
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // ---------- Inicializace ----------
-
 dialProgress.style.strokeDasharray = DIAL_CIRCUMFERENCE;
 dialProgress.style.strokeDashoffset = DIAL_CIRCUMFERENCE;
-hint.textContent = 'Tip: nech telefon připojený k nabíječce a Safari na popředí — dlouhé time-lapsy na pozadí iOS po čase uspí.';
 updateEstimate();
 startCamera();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
-}
