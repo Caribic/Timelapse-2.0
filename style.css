@@ -303,4 +303,16 @@ html, body {
   }
   
   #frameCount { font-size: 24px; }
+  #storageInfo {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border-radius: 6px;
+  border: 1px solid #23262b;
+  text-align: center;
 }
+
+
