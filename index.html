@@ -28,7 +28,6 @@
       <button id="switchCamBtn" class="iconBtn" title="Přepnout kameru">⟲</button>
     </div>
 
-    <!-- Signature prvek: kruhový "clonový" ciferník s odpočtem do dalšího snímku -->
     <div id="dialWrap">
       <svg id="dial" viewBox="0 0 200 200">
         <circle id="dialTrack" cx="100" cy="100" r="88"></circle>
@@ -80,16 +79,25 @@
     </div>
 
     <div class="row">
-      <label for="resSelect">Rozlišení snímků</label>
-      <select id="resSelect">
-        <option value="full">Plné (nejostřejší, více paměti)</option>
-        <option value="hd" selected>Střední — 1280px</option>
-        <option value="sd">Nízké — 854px (dlouhé lapsy)</option>
+      <label for="aspectSelect">Poměr stran ořezu</label>
+      <select id="aspectSelect">
+        <option value="native" selected>Nativní (senzor)</option>
+        <option value="3:2">Filmový (3:2)</option>
+        <option value="16:9">Širokoúhlý (16:9)</option>
       </select>
     </div>
 
     <div class="row">
-      <label for="fpsInput">Snímková frekvence výstupu (FPS)</label>
+      <label for="resSelect">Rozlišení snímků</label>
+      <select id="resSelect">
+        <option value="full">Plné (nejostřejší)</option>
+        <option value="hd" selected>Střední — 1280px</option>
+        <option value="sd">Nízké — 854px</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="fpsInput">Snímková frekvence (FPS)</label>
       <input type="number" id="fpsInput" min="1" max="60" value="24">
     </div>
 
