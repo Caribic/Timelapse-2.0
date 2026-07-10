@@ -1,9 +1,5 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-@font-face {
-  /* systémové monospace pro číselné readouty - vypadá jako digitální displej intervalometru */
-}
-
 :root {
   --amber: #f5a623;
   --amber-dim: #a06a1a;
@@ -35,7 +31,6 @@ html, body {
 }
 
 /* ---------- Kamera + HUD ---------- */
-
 #camWrap {
   position: relative;
   flex: 1 1 auto;
@@ -73,6 +68,7 @@ html, body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
+  z-index: 10;
 }
 
 #eyebrow {
@@ -93,16 +89,17 @@ html, body {
   font-size: 18px;
   width: 38px; height: 38px;
   border-radius: 50%;
+  cursor: pointer;
 }
 
 /* ---------- Signature: clonový ciferník ---------- */
-
 #dialWrap {
   position: absolute;
   bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  width: 132px; height: 132px;
+  width: 120px; height: 120px;
+  z-index: 5;
 }
 
 #dial {
@@ -137,7 +134,7 @@ html, body {
 
 #frameCount {
   font-family: var(--mono);
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 600;
   line-height: 1;
   color: var(--text);
@@ -145,55 +142,58 @@ html, body {
 
 #frameLabel {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.15em;
   color: var(--text-dim);
   margin-top: 4px;
   text-transform: uppercase;
 }
 
-/* ---------- Readouty (uplynulo / zbývá / výstup) ---------- */
-
+/* ---------- Readouty ---------- */
 #readouts {
   position: absolute;
-  top: 56px;
-  left: 16px;
-  right: 16px;
+  top: calc(env(safe-area-inset-top, 10px) + 45px);
+  left: 16px; right: 16px;
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  z-index: 5;
 }
 
 .readout {
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.5);
   border: 1px solid rgba(245,166,35,0.2);
   border-radius: 6px;
-  padding: 6px 10px;
-  min-width: 92px;
+  padding: 6px 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .rLabel {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.14em;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
   color: var(--text-dim);
 }
 
 .rValue {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--amber);
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- Ovládací panel ---------- */
-
 #controls {
   flex: 0 0 auto;
   background: var(--panel);
   padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid #23262b;
   overflow-y: auto;
-  max-height: 52vh;
+  max-height: 50vh;
 }
 
 .modeSwitch {
@@ -206,103 +206,101 @@ html, body {
 }
 
 .modeBtn {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  padding: 9px 4px;
-  font-size: 12.5px;
-  border-radius: 8px;
-  font-family: var(--sans);
+  flex: 1; border: none; background: transparent;
+  color: var(--text-dim); padding: 9px 4px;
+  font-size: 12.5px; border-radius: 8px;
+  font-family: var(--sans); cursor: pointer;
 }
 
 .modeBtn.active {
-  background: var(--amber);
-  color: #1a1204;
-  font-weight: 600;
+  background: var(--amber); color: #1a1204; font-weight: 600;
 }
 
 .row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 10px; margin-bottom: 10px;
 }
 
-.row label {
-  font-size: 13px;
-  color: var(--text-dim);
-  flex: 1;
+.row label { font-size: 13px; color: var(--text-dim); flex: 1; }
+
+.row input[type="number"], .row select {
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid #2a2e34; background: var(--bg);
+  color: var(--text); font-size: 14px;
 }
 
 .row input[type="number"] {
-  width: 78px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #2a2e34;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 15px;
-  text-align: right;
+  width: 85px; font-family: var(--mono); text-align: right;
 }
 
-.row select {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #2a2e34;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  max-width: 58%;
-}
+.row select { max-width: 60%; }
 
 .toggleRow input[type="checkbox"] {
-  width: 20px; height: 20px;
-  accent-color: var(--amber);
+  width: 20px; height: 20px; accent-color: var(--amber);
 }
 
 .primaryBtn {
-  width: 100%;
-  padding: 16px;
-  border-radius: 12px;
-  border: none;
-  background: var(--amber);
-  color: #1a1204;
-  font-size: 16px;
-  font-weight: 700;
-  margin: 6px 0 12px;
-  letter-spacing: 0.01em;
+  width: 100%; padding: 15px; border-radius: 12px; border: none;
+  background: var(--amber); color: #1a1204; font-size: 16px;
+  font-weight: 700; margin: 6px 0 12px; cursor: pointer;
 }
 
-.primaryBtn.running {
-  background: var(--danger);
-  color: white;
-}
-
-.buttonsRow {
-  gap: 8px;
-}
+.primaryBtn.running { background: var(--danger); color: white; }
+.buttonsRow { gap: 8px; }
 
 .smallBtn {
-  flex: 1;
-  padding: 11px 6px;
-  border-radius: 10px;
-  border: 1px solid #2a2e34;
-  background: var(--panel2);
-  color: #ddd;
-  font-size: 13px;
+  flex: 1; padding: 11px 6px; border-radius: 10px;
+  border: 1px solid #2a2e34; background: var(--panel2);
+  color: #ddd; font-size: 13px; cursor: pointer;
 }
 
-.smallBtn.danger {
-  color: #ff8a8d;
-  border-color: #3a2323;
-}
+.smallBtn.danger { color: #ff8a8d; border-color: #3a2323; }
+#hint { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin: 10px 2px 0; }
 
-#hint {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  margin: 10px 2px 0;
+/* ============================================================ */
+/* REZIM NA SIRKU (LANDSCAPE) MAPOVANI OBRAZOVKY                 */
+/* ============================================================ */
+@media (orientation: landscape) {
+  #app {
+    flex-direction: row;
+  }
+
+  #camWrap {
+    flex: 1 1 55%;
+    height: 100%;
+  }
+
+  #controls {
+    flex: 0 0 45%;
+    max-height: 1002vh; /* reset omezení výšky na výšku */
+    height: 100%;
+    border-top: none;
+    border-left: 1px solid #23262b;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+
+  #readouts {
+    top: env(safe-area-inset-top, 10px);
+    left: calc(env(safe-area-inset-left, 0px) + 16px);
+    right: 16px;
+  }
+  
+  #topBar {
+    bottom: env(safe-area-inset-bottom, 10px);
+    top: auto;
+    left: calc(env(safe-area-inset-left, 0px) + 16px);
+  }
+
+  #dialWrap {
+    bottom: 20px;
+    left: auto;
+    right: 20px;
+    transform: none;
+    width: 100px;
+    height: 100px;
+  }
+  
+  #frameCount { font-size: 24px; }
 }
