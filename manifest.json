@@ -1,11 +1,11 @@
 {
   "name": "Intervalometer — Time-lapse",
   "short_name": "Time-lapse",
-  "description": "Programovatelný intervalometer pro tvorbu time-lapse videí přímo z iPhonu",
+  "description": "Programovatelný bezplatný intervalometer pro tvorbu time-lapse videí plně offline.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0b0d10",
   "theme_color": "#0b0d10",
   "icons": [
