@@ -25,7 +25,10 @@
 
     <div id="topBar">
       <div id="eyebrow">TIME-LAPSE</div>
-      <button id="switchCamBtn" class="iconBtn" title="Přepnout kameru">⟲</button>
+      <div style="display: flex; gap: 8px;">
+        <button id="lockBtn" class="iconBtn" title="Uzamknout expozici/ostření">🔓</button>
+        <button id="switchCamBtn" class="iconBtn" title="Přepnout kameru">⟲</button>
+      </div>
     </div>
 
     <div id="dialWrap">
@@ -116,6 +119,7 @@
       <button id="clearBtn" class="smallBtn danger">Smazat vše</button>
     </div>
 
+    <div id="storageInfo">Úložiště: Načítání...</div>
     <p id="hint"></p>
   </div>
 
